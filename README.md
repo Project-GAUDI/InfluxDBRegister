@@ -35,7 +35,7 @@ InfluxDBRegisterは、入力されたメッセージをInfluxDBに格納するAz
 ![schematic diagram](./docs/img/schematic_diagram.drawio.png)
 
 ## Quick Start
-1. Personal Accese tokenを作成
+1. Personal Access tokenを作成
 （参考: [個人用アクセス トークンを管理する](https://docs.github.com/ja/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)）
 
 2. リポジトリをクローン
@@ -43,7 +43,7 @@ InfluxDBRegisterは、入力されたメッセージをInfluxDBに格納するAz
 git clone https://github.com/Project-GAUDI/InfluxDBRegister
 ```
 
-3. ./src/nuget_template.configの<GITHUB_USERNAME>と<PERSONAL_ACCESS_TOKEN>を自身のユーザー名とPersonal Accese tokenに書き換えて、ファイル名をnuget.configに変更してください
+3. ./src/nuget_template.configの<GITHUB_USERNAME>と<PERSONAL_ACCESS_TOKEN>を自身のユーザー名とPersonal Access tokenに書き換えて、ファイル名をnuget.configに変更してください
 
 4. Dockerイメージをビルド
 ```
@@ -73,9 +73,9 @@ docker push ghcr.io/<YOUR_GITHUB_USERNAME>/influxdbregister:<VERSION>
 
 ## 動作保証環境
 
-| Module Version | IoTEdge | edgeAgent | edgeHub  | amd64 verified on | arm64v8 verified on | arm32v7 verified on |
-| -------------- | ------- | --------- | -------- | ----------------- | ------------------- | ------------------- |
-| 6.0.0-rc1      | 1.5.0   | 1.5.6     | 1.5.6    | ubuntu22.04       | －                  | －                  |
+| Module Version | IoTEdge         | edgeAgent       | edgeHub         | amd64 verified on | arm64v8 verified on | arm32v7 verified on |
+| -------------- | --------------- | --------------- | --------------- | ----------------- | ------------------- | ------------------- |
+| 6.0.2          | 1.5.0<br>1.5.16 | 1.5.6<br>1.5.19 | 1.5.6<br>1.5.19 | ubuntu22.04       | －                  | －                  |
 
 ## Deployment 設定値
 
@@ -95,24 +95,23 @@ docker push ghcr.io/<YOUR_GITHUB_USERNAME>/influxdbregister:<VERSION>
 
 #### Desired Properties の値
 
-| JSON Key                      | Type    | Required | Default   | Description |
-| ----------------------------- | ------- | -------- | --------- | --------------------------------------------------- |
-| dbparam[x]                    | object  | 〇       |           | [x]は連番の数字<br>監視するメッセージ情報。 |
-| &nbsp; input                  | string  | 〇       |           | 受信するメッセージのインプット名。 |
-| &nbsp; measurement            | string  | 〇       |           | influxdb の書き込み先テーブル名。 |
-| &nbsp; use_header             | boolean | 〇       |           | 受信するメッセージの RecordHeader 部の値使用可否。 |
-| &nbsp; use_data               | boolean | 〇       |           | 受信するメッセージの RecordData 部の値使用可否。 |
-| &nbsp; set_usertimestamp      | boolean | 〇       |           | false:ユーザ
-  set_usertimestamp	boolean	〇		false:ユーザタイムタイムスタンプを指定しない。DB 挿入時の時刻をタイムスタンプとする。<br>true:ユーザタイムスタンプを指定する。以下の有効順の設定項目に従って、タイプスタンプを設定する。 <br> &nbsp; 有効順: timestamp_index |
-| &nbsp; timestamp_index        | string  | 〇       |           | ユーザタイムスタンプとして登録する入力データのインデックス（カラム番号：１～）を指定。 |
-| &nbsp; field_data_type        | string  |          | automatic | データの保存タイプを指定する。<br>&nbsp; "string_all": 全て文字列データとして保存する。<br>&nbsp; "automatic":自動決定。入力データの状態のまま保存する。動作は、InfluxDB の仕様に準じる。(※1) |
-| &nbsp; tags                   | object  | 〇       |           | influxdb に格納するタグ名称を列挙。 |
-| &nbsp;&nbsp; tag 設定方法 1  |         |          |           | |
-| &nbsp;&nbsp; tag[y]           | string  | 〇       |           | [y]は 1 から始まる連番<br>MessageProperty 名を指定。 |
-| &nbsp;&nbsp; tag 設定方法 2  |         |          |           | |
-| &nbsp;&nbsp; tag[y]           | object  | 〇       |           | [y]は 1 から始まる連番<br>MessageProperty 名と行番号のセットを指定。 |
-| &nbsp;&nbsp;&nbsp; tag_name   | string  | 〇       |           | MessageProperty 名。 |
-| &nbsp;&nbsp;&nbsp; value_type | string  | 〇       |           | MessageProperty: プロパティ値を出力<br>MessagePropertyAndRowIndex: プロパティ値に行番号を加算した値を出力。 |
+| JSON Key                      | Type    | Required | Default   | Recommend | Description |
+| ----------------------------- | ------- | -------- | --------- | --------- | --------------------------------------------------- |
+| dbparam[x]                    | object  | 〇       |           |           | [x]は連番の数字<br>監視するメッセージ情報。 |
+| &nbsp; input                  | string  | 〇       |           |           | 受信するメッセージのインプット名。 |
+| &nbsp; measurement            | string  | 〇       |           |           | influxdb の書き込み先テーブル名。 |
+| &nbsp; use_header             | boolean | 〇       |           |           | 受信するメッセージの RecordHeader 部の値使用可否。 |
+| &nbsp; use_data               | boolean | 〇       |           |           | 受信するメッセージの RecordData 部の値使用可否。 |
+| &nbsp; set_usertimestamp      | boolean | 〇       |           |           | false:ユーザタイムスタンプを指定しない。DB 挿入時の時刻をタイムスタンプとする。<br>true:ユーザタイムスタンプを指定する。timestamp_indexで指定されたインデックス位置のデータを用いて、タイプスタンプを設定する。 |
+| &nbsp; timestamp_index        | string  | △       |           |           | ユーザタイムスタンプとして登録する入力データのインデックス（カラム番号：１～）を指定。<br>※ set_usertimestampがtrueの場合に必須。 |
+| &nbsp; field_data_type        | string  |          | automatic |           | データの保存タイプを指定する。<br>&nbsp; "string_all": 全て文字列データとして保存する。<br>&nbsp; "automatic":自動決定。入力データの状態のまま保存する。動作は、InfluxDB の仕様に準じる。(※1) |
+| &nbsp; tags                   | object  | 〇       |           |           | influxdb に格納するタグ名称を列挙。 |
+| &nbsp;&nbsp; tag 設定方法 1    |         |          |           |           |           |
+| &nbsp;&nbsp; tag[y]           | string  | 〇       |           |           | [y]は 1 から始まる連番<br>MessageProperty 名を指定。 |
+| &nbsp;&nbsp; tag 設定方法 2    |         |          |           |           |           |
+| &nbsp;&nbsp; tag[y]           | object  | 〇       |           |           | [y]は 1 から始まる連番<br>MessageProperty 名と行番号のセットを指定。 |
+| &nbsp;&nbsp;&nbsp; tag_name   | string  | 〇       |           |           | MessageProperty 名。 |
+| &nbsp;&nbsp;&nbsp; value_type | string  | 〇       |           |           | MessageProperty: プロパティ値を出力<br>MessagePropertyAndRowIndex: プロパティ値に行番号を加算した値を出力。 |
 
 #### Desired Properties の記入例
 
