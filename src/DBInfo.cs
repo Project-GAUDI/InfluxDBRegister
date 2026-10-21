@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using TICO.GAUDI.Commons;
 
 namespace IotedgeV2InfluxDBRegister
@@ -46,129 +47,32 @@ namespace IotedgeV2InfluxDBRegister
             MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Start Method: CreateInstance");
 
             var ret = new DBInfo();
-            try
+            ret.Input = Util.GetDesiredProperty<string>(jobj, "input", true);
+            ret.Measurement = Util.GetDesiredProperty<string>(jobj, "measurement", true);
+            var Tags = Util.GetDesiredProperty<JObject>(jobj, "tags", true);
+            for (int i = 1; Tags.TryGetValue(TAG_INFO_KEY + i.ToString("D"), out JToken tag); i++)
             {
-                ret.Input = Util.GetRequiredValue<string>(jobj, "input");
+                ret.TagList.Add(TagInfo.CreateInstance(tag));
             }
-            catch (Exception)
+            if(ret.TagList.Count == 0)
             {
-                var errmsg = $"Property input does not exist.";
-                MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"{errmsg}", true);
+                var errmsg = $"No tag value.";
                 MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                throw;
+                throw new Exception(errmsg);
             }
-            //try
-            //{
-            //    ret.Output = Util.GetRequiredValue<string>(jobj, "output");
-            //}
-            //catch (Exception)
-            //{
-            //    var errmsg = $"Property output does not exist.";
-            //    MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"{errmsg}", true);
-            //    MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-            //    throw;
-            //}
-            try
-            {
-                ret.Measurement = Util.GetRequiredValue<string>(jobj, "measurement");
-            }
-            catch (Exception)
-            {
-                var errmsg = $"Property measurement does not exist.";
-                MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"{errmsg}", true);
-                MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                throw;
-            }
-            if (jobj.TryGetValue("tags", out JToken jtoken))
-            {
-                var Tags = (JObject)jtoken;
-                for (int i = 1; Tags.TryGetValue(TAG_INFO_KEY + i.ToString("D"), out JToken tag); i++)
-                {
-                    ret.TagList.Add(TagInfo.CreateInstance(tag));
-                }
-                if(ret.TagList.Count == 0)
-                {
-                    var errmsg = $"No tag value.";
-                    MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                    throw new Exception(errmsg);
-                }
-            }
-            try
-            {
-                ret.UseHeader = Util.GetRequiredValue<bool>(jobj, "use_header");
-            }
-            catch (Exception)
-            {
-                var errmsg = $"Property use_header does not exist.";
-                MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"{errmsg}", true);
-                MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                throw;
-            }
-            try
-            {
-                ret.UseData = Util.GetRequiredValue<bool>(jobj, "use_data");
-            }
-            catch (Exception)
-            {
-                var errmsg = $"Property use_data does not exist.";
-                MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"{errmsg}", true);
-                MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                throw;
-            }
-            try
-            {
-                ret.SetUserTimestamp = Util.GetRequiredValue<bool>(jobj, "set_usertimestamp");
-            }
-            catch (Exception)
-            {
-                var errmsg = $"Property set_usertimestamp does not exist.";
-                MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"{errmsg}", true);
-                MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                throw;
-            }
+            
+            ret.UseHeader = Util.GetDesiredProperty<bool>(jobj, "use_header", true);
+            
+            ret.UseData = Util.GetDesiredProperty<bool>(jobj, "use_data", true);
+
+            ret.SetUserTimestamp = Util.GetDesiredProperty<bool>(jobj, "set_usertimestamp", true);
+
             if (ret.SetUserTimestamp)
             {
-                if (jobj.TryGetValue("timestamp_index", out JToken jtk_timestamp_index))
-                {
-                    int index = jtk_timestamp_index.Value<int>();
-                    if (index < 1)
-                    {
-                        var errmsg = $"Index value less than 1.";
-                        MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                        throw new Exception(errmsg);
-                    }
-                    ret.TimestampIndex = index;
-                    ret.TimestampType = UserTimestampType.timestamp_index;
-                }
-                // else if (jobj.TryGetValue("usertimestamp", out JToken jtk_usertimestamp))
-                // {
-                //     ret.TimestampValue = jtk_usertimestamp.Value<DateTime>();
-                //     ret.TimestampType = UserTimestampType.usertimestamp;
-                // }
-                else
-                {
-                    var errmsg = $"No timestamp value.";
-                    MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                    throw new Exception(errmsg);
-                }
+                ret.TimestampIndex=Util.GetDesiredProperty<int>(jobj, "timestamp_index", true,1,condition: x => x >= 1);
+                ret.TimestampType = UserTimestampType.timestamp_index;
             }
-
-            if (jobj.TryGetValue("field_data_type", out JToken jtk_field_data_type))
-            {
-                string fieldDataTypeStr = jtk_field_data_type.Value<string>();
-                if (Enum.IsDefined(typeof(FieldDataTypeMode), fieldDataTypeStr))
-                {
-                    Enum.TryParse(fieldDataTypeStr, out FieldDataTypeMode fieldDataTypeEnum);
-                    ret.FieldDataType = fieldDataTypeEnum;
-                }
-                else 
-                {
-                    var errmsg = $"Not supported field_data_type: {fieldDataTypeStr}.";
-                    MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                    throw new Exception(errmsg);
-                }
-            }
-
+            ret.FieldDataType = Util.GetDesiredProperty<FieldDataTypeMode>(jobj, "field_data_type", false,FieldDataTypeMode.automatic);
             MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"End Method: CreateInstance");
 
             return ret;

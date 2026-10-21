@@ -1,7 +1,10 @@
 using InfluxDB.Collector;
 using InfluxDB.Collector.Pipeline;
+using InfluxDB.Collector.Configuration;
+using System.Reflection;
+using IotedgeV2InfluxDBRegister.Test.Stub;
 
-namespace IotedgeV2InfluxDBRegister.Test.Stub;
+namespace InfluxDBRegister.Test.Stub;
 
 /// <summary>
 /// MetricsCollectorのモッククラス
@@ -13,18 +16,71 @@ namespace IotedgeV2InfluxDBRegister.Test.Stub;
 /// </see>
 /// を参照すること
 /// </remarks>
-public class MockMetricsCollector : MetricsCollector
+public class MockMetricsCollector : IDisposable
 {
     private readonly List<WriteMethodArguments> _calledArguments = [];
+    private readonly MetricsCollector _realCollector;
+    private static MockMetricsCollector? _instance;
 
-    protected override void Emit(PointData[] points)
+    /// <summary>  
+    /// MockMetricsCollectorのコンストラクタ
+    /// </summary>
+    public MockMetricsCollector()
     {
-        // 継承が必須のため、宣言のみ実施
+        // 実際のMetricsCollectorを作成（テスト用のダミー設定で）
+        var config = new CollectorConfiguration();
+        config.WriteTo.InfluxDB("http://localhost:8086", "testdb");
+        _realCollector = config.CreateCollector();
+        
+        // シングルトンパターンでインスタンスを管理
+        _instance = this;
+    }
+
+    /// <summary>
+    /// 現在のインスタンスを取得
+    /// </summary>
+    public static MockMetricsCollector? Current => _instance;
+
+    /// <summary>
+    /// MetricsCollectorとしてキャストするためのオペレータ
+    /// </summary>
+    public static implicit operator MetricsCollector(MockMetricsCollector mock)
+    {
+        return mock._realCollector;
+    }
+
+
+
+
+
+
+
+
+
+    public void Emit(PointData[] points)
+    {
+        // テスト用のEmit実装
+    }
+
+    /// <summary>
+    /// WriteメソッドをMetricsCollectorに転送
+    /// </summary>
+    public void Write(string measurement, IReadOnlyDictionary<string, object> fields, IReadOnlyDictionary<string, string>? tags, DateTime? timestamp)
+    {
+        // 引数をテスト用に保存
+        StackWriteArguments(measurement, fields, tags, timestamp);
+        
+        // 実際のMetricsCollectorには送信しない（テスト環境では不要）
     }
 
     public void StackWriteArguments(string measurement, IReadOnlyDictionary<string, object> fields, IReadOnlyDictionary<string, string>? tags, DateTime? timestamp)
     {
         _calledArguments.Add(WriteMethodArguments.Parse(measurement, fields, tags, timestamp));
+    }
+
+    public void ReviewCalledArguments()
+    {
+        Assert.Empty(_calledArguments);
     }
 
     public void ReviewCalledArguments(WriteMethodArguments expected)
@@ -47,9 +103,23 @@ public class MockMetricsCollector : MetricsCollector
             if (expected.Timestamp == null)
                 Assert.Null(actual.Timestamp);
             else
-                Assert.Equal(expected.Timestamp, actual.Timestamp);
+            {
+                // タイムゾーンを統一してUTCで比較
+                var expectedUtc = expected.Timestamp?.ToUniversalTime();
+                var actualUtc = actual.Timestamp?.ToUniversalTime();
+                Assert.Equal(expectedUtc, actualUtc);
+            }
         }
 
         _calledArguments.Clear();
+    }
+
+    /// <summary>
+    /// IDisposableの実装
+    /// </summary>
+    public void Dispose()
+    {
+        _realCollector?.Dispose();
+        _instance = null;
     }
 }

@@ -56,13 +56,20 @@ namespace IotedgeV2InfluxDBRegister
             /// <param name="jObj">メッセージオブジェクト</param>
             public GaudiRecord(JObject jObj)
             {
+                MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Start Method: GaudiRecord");
 
-                JToken recordHeaders = null;
+                JToken recordHeaders;
                 if (jObj.TryGetValue("RecordHeader", out recordHeaders))
                 {
                     List<string> gaudiHeaders = new List<string>();
 
                     JArray recordHeaderArray = recordHeaders as JArray;
+                    if (recordHeaderArray == null)
+                    {
+                        var errmsg = "Invalid RecordHeader datatype";
+                        MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: GaudiRecord caused by {errmsg}");
+                        throw new Exception(errmsg);
+                    }
 
                     foreach (var header in recordHeaderArray)
                     {
@@ -89,13 +96,18 @@ namespace IotedgeV2InfluxDBRegister
                     throw new Exception(errmsg);
                 }
 
-                JToken recordDatas = null;
+                JToken recordDatas;
                 if (jObj.TryGetValue("RecordData", out recordDatas))
                 {
                     List<GaudiData> gaudiDatas = new List<GaudiData>();
 
                     JArray recordDataArray = recordDatas as JArray;
-
+                    if (recordDataArray == null)
+                    {
+                        var errmsg = "Invalid RecordData datatype";
+                        MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: GaudiRecord caused by {errmsg}");
+                        throw new Exception(errmsg);
+                    }
                     foreach (var data in recordDataArray)
                     {
                         if (data is JValue)
