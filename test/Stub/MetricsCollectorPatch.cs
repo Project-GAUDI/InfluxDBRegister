@@ -1,7 +1,7 @@
 using HarmonyLib;
 using InfluxDB.Collector;
 
-namespace IotedgeV2InfluxDBRegister.Test.Stub;
+namespace InfluxDBRegister.Test.Stub;
 
 /// <summary>
 /// MetricsCollectorのWrite関数をスタブ化するためのパッチ
@@ -24,9 +24,13 @@ public class MetricsCollectorPatch
         IReadOnlyDictionary<string, string>? tags,
         DateTime? timestamp)
     {
-        var instance = __instance as MockMetricsCollector;
-        instance!.StackWriteArguments(measurement, fields, tags, timestamp);
+        // 現在のMockMetricsCollectorインスタンスを取得
+        var mockInstance = MockMetricsCollector.Current;
+        if (mockInstance != null)
+        {
+            mockInstance.StackWriteArguments(measurement, fields, tags, timestamp);
+        }
 
-        return false;
+        return false; // 実際のメソッドは実行しない
     }
 }

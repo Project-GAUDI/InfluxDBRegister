@@ -1,18 +1,99 @@
+﻿using TICO.GAUDI.Commons;
+
 namespace IotedgeV2InfluxDBRegister.Test;
 
+[Collection(nameof(CollectionAttribute))]
 public class DBInfo_CreateInstance
 {
-    [Fact(DisplayName = "No.48 引数 jobj に以下の空のJSONオブジェクトが設定される")]
-    public void Case048()
-    {
-        var properties = JObject.Parse(@"{}");
+    private readonly ITestOutputHelper _output;
+    private readonly MultiTextWriter _logWriter;
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+    public DBInfo_CreateInstance(ITestOutputHelper output)
+    {
+        _output = output;
+        // DBInfoのMyLoggerをキャプチャ設定
+        var logger = (ILogger)typeof(DBInfo).GetProperty("MyLogger", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        var stringWriter = new StringWriter();
+        var consoleWriter = Console.Out;
+        var multiWriter = new MultiTextWriter(consoleWriter, stringWriter);
+        logger.SetOutputLogLevel(ILogger.LogLevel.TRACE.ToString());
+        logger.SetOutputTextWriter(multiWriter);
+        _logWriter = multiWriter;
     }
 
-    [Fact(DisplayName = "No.49 引数 jobj の input プロパティにオブジェクト（非文字列値）が設定される")]
-    public void Case049()
+    private void AssertLogContains(string expected)
     {
+        LoggerHelper.AssertLogContains(_logWriter, _output, expected);
+    }
+
+    [Fact(DisplayName = "No.27_異常系：必須項目の確認_\"input\"が存在しない")]
+    public void Case027()
+    {
+        string target = "input";
+        // プロパティ作成(inputが存在しない)
+        var properties = JObject.Parse(@"{}");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.RequiredPropertyNotSpecified(target), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.28_異常系：不正値の確認（string型）_\"input\"がnull")]
+    public void Case028()
+    {
+        string target = "input";
+        // プロパティ作成(inputがnull)
+        var properties = JObject.Parse(@"
+        {
+            ""input"": null,
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.PropertyNullOrEmpty(target)), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.29_異常系：不正値の確認（string型）_\"input\"が空文字")]
+    public void Case029()
+    {
+        string target = "input";
+        // プロパティ作成(inputが空文字)
+        var properties = JObject.Parse(@"
+        {
+            ""input"": """",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Equal(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.PropertyNullOrEmpty(target)), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.131_異常系：不正値の確認（string型）_\"input\"がオブジェクト")]
+    public void Case131()
+    {
+        string target = "input";
+        // プロパティ作成(inputがオブジェクト)
         var properties = JObject.Parse(@"
         {
             ""input"": {},
@@ -27,12 +108,117 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.CannotConvert), ex.Message);
     }
 
-    [Fact(DisplayName = "No.50 引数 jobj の measurement プロパティにオブジェクト（非文字列）が設定される")]
-    public void Case050()
+    [Fact(DisplayName = "No.30_正常系：正常値の確認（string型）_\"input\"がnull/空文字以外")]
+    public void Case030()
     {
+        string value = "TEST_INPUT";
+        // プロパティ作成(inputがnull/空文字以外)
+        var properties = JObject.Parse($@"
+        {{
+            ""input"": ""{value}"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {{
+                ""tag1"": ""TEST_TAG1_STR""
+            }},
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }}
+        ");
+
+        var instance = DBInfo.CreateInstance(properties);
+
+        // 結果確認
+        Assert.Equal(value, instance.Input);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
+    }
+
+    [Fact(DisplayName = "No.31_異常系：必須項目の確認_\"measurement\"が存在しない")]
+    public void Case031()
+    {
+        string target = "measurement";
+        // プロパティ作成(measurementが存在しない)
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.RequiredPropertyNotSpecified(target), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.32_異常系：不正値の確認（string型）_\"measurement\"がnull")]
+    public void Case032()
+    {
+        string target = "measurement";
+        // プロパティ作成(measurementがnull)
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": null,
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.PropertyNullOrEmpty(target)), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.33_異常系：不正値の確認（string型）_\"measurement\"が空文字")]
+    public void Case033()
+    {
+        string target = "measurement";
+        // プロパティ作成(measurementが空文字)
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": """",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.PropertyNullOrEmpty(target)), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.132_異常系：不正値の確認（string型）_\"measurement\"がオブジェクト")]
+    public void Case132()
+    {
+        string target = "measurement";
+        // プロパティ作成(measurementがオブジェクト)
         var properties = JObject.Parse(@"
         {
             ""input"": ""TEST_INPUT"",
@@ -47,12 +233,87 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.CannotConvert), ex.Message);
     }
 
-    [Fact(DisplayName = "No.51 引数 jobj の tags プロパティに空オブジェクトが設定される")]
-    public void Case051()
+    [Fact(DisplayName = "No.34_正常系：正常値の確認（string型）_\"measurement\"がnull/空文字以外")]
+    public void Case034()
     {
+        string value = "TEST_MEASUREMENT";
+        // プロパティ作成(measurementがnull/空文字以外)
+        var properties = JObject.Parse($@"
+        {{
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""{value}"",
+            ""tags"": {{
+                ""tag1"": ""TEST_TAG1_STR""
+            }},
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }}
+        ");
+
+        var instance = DBInfo.CreateInstance(properties);
+
+        // 結果確認
+        Assert.Equal(value, instance.Measurement);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
+    }
+
+    [Fact(DisplayName = "No.35_異常系：必須項目の確認_\"tags\"が存在しない")]
+    public void Case035()
+    {
+        string target = "tags";
+        // プロパティ作成(tagsが存在しない)
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.RequiredPropertyNotSpecified(target), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.36_異常系：不正値の確認（object型）_\"tags\"がオブジェクト以外")]
+    public void Case036()
+    {
+        string target = "tags";
+        // プロパティ作成(tagsがオブジェクト以外)
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": [],
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.DeserializedJsonType), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.37_異常系：必須項目の確認_\"tag1\"が存在しない")]
+    public void Case037()
+    {
+        // プロパティ作成(tag1が存在しない)
         var properties = JObject.Parse(@"
         {
             ""input"": ""TEST_INPUT"",
@@ -65,18 +326,22 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains("No tag value", ex.Message);
     }
 
-    [Fact(DisplayName = "No.52 引数 jobj の tags.tag1 プロパティにJSON配列（非文字列 or オブジェクト）が設定される")]
-    public void Case052()
+    [Fact(DisplayName = "No.38_異常系：不正値の確認（string型）_\"tag1\"が存在せず、\"tag2\"が存在する")]
+    public void Case038()
     {
+        // プロパティ作成("tag1"が存在せず、"tag2"が存在する)
         var properties = JObject.Parse(@"
         {
             ""input"": ""TEST_INPUT"",
             ""measurement"": ""TEST_MEASUREMENT"",
             ""tags"": {
-                ""tag1"": []
+                ""tag2"": ""TEST_TAG2_STR""
             },
             ""use_header"": true,
             ""use_data"": true,
@@ -85,11 +350,62 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains("No tag value", ex.Message);
     }
 
-    [Fact(DisplayName = "No.53 引数 jobj の tags.tag1.tag_name プロパティにオブジェクト（非文字列）が設定される")]
-    public void Case053()
+    [Fact(DisplayName = "No.40_正常系：正常値の確認（string型）_\"tag1\"が存在し、正常終了する")]
+    public void Case040()
+    {
+        // プロパティ作成("tag1"が存在し、正常終了する)
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        DBInfo.CreateInstance(properties);
+        
+        // 結果確認
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
+    }
+
+    [Fact(DisplayName = "No.41_正常系：正常値の確認（string型）_\"tag1\"、\"tag2\"が存在し、正常終了する")]
+    public void Case041()
+    {
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR"",
+                ""tag2"": ""TEST_TAG2_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        DBInfo.CreateInstance(properties);
+        
+        // 結果確認
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
+    }
+
+    [Fact(DisplayName = "No.42_正常系：正常値の確認（object型）_\"tag1\"が存在し、正常終了する")]
+    public void Case042()
     {
         var properties = JObject.Parse(@"
         {
@@ -97,7 +413,7 @@ public class DBInfo_CreateInstance
             ""measurement"": ""TEST_MEASUREMENT"",
             ""tags"": {
                 ""tag1"": {
-                    ""tag_name"": {},
+                    ""tag_name"": ""TEST_TAG1_NAME"",
                     ""value_type"": ""MessageProperty""
                 }
             },
@@ -108,11 +424,14 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        DBInfo.CreateInstance(properties);
+        
+        // 結果確認
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
     }
 
-    [Fact(DisplayName = "No.54 引数 jobj の tags.tag1.value_type プロパティにオブジェクト（非文字列）が設定される")]
-    public void Case054()
+    [Fact(DisplayName = "No.43_正常系：正常値の確認（object型）_\"tag1\"、\"tag2\"が存在し、正常終了する")]
+    public void Case043()
     {
         var properties = JObject.Parse(@"
         {
@@ -121,7 +440,11 @@ public class DBInfo_CreateInstance
             ""tags"": {
                 ""tag1"": {
                     ""tag_name"": ""TEST_TAG1_NAME"",
-                    ""value_type"": {}
+                    ""value_type"": ""MessageProperty""
+                },
+                ""tag2"": {
+                    ""tag_name"": ""TEST_TAG2_NAME"",
+                    ""value_type"": ""MessagePropertyAndRowIndex""
                 }
             },
             ""use_header"": true,
@@ -131,35 +454,39 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        DBInfo.CreateInstance(properties);
+        
+        // 結果確認
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
     }
 
-    [Fact(DisplayName = "No.55 引数 jobj の tags.tag1.value_type プロパティに受け入れ不可能な文字列（\"MessagePropertyAndRowIndex\", \"MessageProperty\"以外の文字列）が設定される")]
-    public void Case055()
+    [Fact(DisplayName = "No.44_異常系：必須項目の確認_\"use_header\"が存在しない")]
+    public void Case044()
     {
+        string target = "use_header";
         var properties = JObject.Parse(@"
         {
             ""input"": ""TEST_INPUT"",
             ""measurement"": ""TEST_MEASUREMENT"",
             ""tags"": {
-                ""tag1"": {
-                    ""tag_name"": ""TEST_TAG1_NAME"",
-                    ""value_type"": ""INVALID_VALUE""
-                }
+                ""tag1"": ""TEST_TAG1_STR""
             },
-            ""use_header"": true,
             ""use_data"": true,
             ""set_usertimestamp"": true,
             ""timestamp_index"": 1
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.RequiredPropertyNotSpecified(target), ex.Message);
     }
 
-    [Fact(DisplayName = "No.56 引数 jobj の use_header プロパティにオブジェクト（非真偽値）が設定される")]
-    public void Case056()
+    [Fact(DisplayName = "No.45_異常系：不正値の確認（boolean型）_\"use_header\"が真偽値以外")]
+    public void Case045()
     {
+        string target = "use_header";
         var properties = JObject.Parse(@"
         {
             ""input"": ""TEST_INPUT"",
@@ -174,12 +501,63 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.CannotConvert), ex.Message);
     }
 
-    [Fact(DisplayName = "No.57 引数 jobj の use_data プロパティにオブジェクト（非真偽値）が設定される")]
-    public void Case057()
+    [Fact(DisplayName = "No.46_正常系：正常値の確認（boolean型）_\"use_header\"が真偽値")]
+    public void Case046()
     {
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var instance = DBInfo.CreateInstance(properties);
+
+        // 結果確認
+        Assert.True(instance.UseHeader);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
+    }
+
+    [Fact(DisplayName = "No.47_異常系：必須項目の確認_\"use_data\"が存在しない")]
+    public void Case047()
+    {
+        string target = "use_data";
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.RequiredPropertyNotSpecified(target), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.48_異常系：不正値の確認（boolean型）_\"use_data\"が真偽値以外")]
+    public void Case048()
+    {
+        string target = "use_data";
         var properties = JObject.Parse(@"
         {
             ""input"": ""TEST_INPUT"",
@@ -194,12 +572,61 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.CannotConvert), ex.Message);
+    }
+    [Fact(DisplayName = "No.49_正常系：正常値の確認（boolean型）_\"use_data\"が真偽値")]
+    public void Case049()
+    {
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var instance = DBInfo.CreateInstance(properties);
+
+        // 結果確認
+        Assert.True(instance.UseData);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
     }
 
-    [Fact(DisplayName = "No.58 引数 jobj の set_usertimestamp プロパティにオブジェクト（非真偽値）が設定される")]
-    public void Case058()
+    [Fact(DisplayName = "No.50_異常系：必須項目の確認_\"set_usertimestamp\"が存在しない")]
+    public void Case050()
     {
+        string target = "set_usertimestamp";
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.RequiredPropertyNotSpecified(target), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.51_異常系：不正値の確認（boolean型）_\"set_usertimestamp\"が真偽値以外")]
+    public void Case051()
+    {
+        string target = "set_usertimestamp";
         var properties = JObject.Parse(@"
         {
             ""input"": ""TEST_INPUT"",
@@ -213,11 +640,14 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.CannotConvert), ex.Message);
     }
 
-    [Fact(DisplayName = "No.59 引数 jobj の set_usertimestamp プロパティに true が設定されている、かつ、timestamp_index プロパティにオブジェクト（非整数値）が設定される")]
-    public void Case059()
+    [Fact(DisplayName = "No.52_正常系：正常値の確認（boolean型）_\"set_usertimestamp\"が真偽値")]
+    public void Case052()
     {
         var properties = JObject.Parse(@"
         {
@@ -229,16 +659,68 @@ public class DBInfo_CreateInstance
             ""use_header"": true,
             ""use_data"": true,
             ""set_usertimestamp"": true,
-            ""timestamp_index"": ""INVALID_TYPE""
+            ""timestamp_index"": 1
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var instance = DBInfo.CreateInstance(properties);
+
+        // 結果確認
+        Assert.True(instance.SetUserTimestamp);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
     }
 
-    [Fact(DisplayName = "No.60 引数 jobj の set_usertimestamp プロパティに true が設定されている、かつ、timestamp_index プロパティに0（0以下の値）が設定される")]
-    public void Case060()
+    [Fact(DisplayName = "No.53_異常系：必須項目の確認_\"set_usertimestamp\"がtrue\"timestamp_index\"が存在しない")]
+    public void Case053()
     {
+        string target = "timestamp_index";
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        Assert.Contains(DesiredPropertiesHelper.RequiredPropertyNotSpecified(target), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.54_異常系：不正値の確認（number型）_\"set_usertimestamp\"がtrue\"timestamp_index\"が数値以外")]
+    public void Case054()
+    {
+        string target = "timestamp_index";
+        string value = "INVALID_TYPE";
+        
+        var properties = JObject.Parse($@"
+        {{
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {{
+                ""tag1"": ""TEST_TAG1_STR""
+            }},
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": ""{value}""
+        }}
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.IncorrectFormat(value)), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.55_異常系：不正値の確認（number型）_\"set_usertimestamp\"がtrue\"timestamp_index\"が1未満の数値")]
+    public void Case055()
+    {
+        string target = "timestamp_index";
         var properties = JObject.Parse(@"
         {
             ""input"": ""TEST_INPUT"",
@@ -253,12 +735,65 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.PropertyConditionNotMet(target)), ex.Message);
     }
 
-    [Fact(DisplayName = "No.61 引数 jobj の field_data_type プロパティにオブジェクト（非文字列）が設定される")]
-    public void Case061()
+    [Fact(DisplayName = "No.56_正常系：正常値の確認（number型）_\"set_usertimestamp\"がtrue\"timestamp_index\"が1以上の数値")]
+    public void Case056()
     {
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1
+        }
+        ");
+
+        var instance = DBInfo.CreateInstance(properties);
+
+        // 結果確認
+        Assert.Equal(1, instance.TimestampIndex);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
+    }
+
+    [Fact(DisplayName = "No.57_異常系：不正値の確認（string型）_\"field_data_type\"が\"automatic\"/\"string_all\"以外で\"test\"")]
+    public void Case057()
+    {
+        string target = "field_data_type";
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1,
+            ""field_data_type"": ""test""
+        }
+        ");
+
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.CouldNotConvert), ex.Message);
+    }
+
+    [Fact(DisplayName = "No.133_異常系：不正値の確認（string型）_\"field_data_type\"がオブジェクト")]
+    public void Case133()
+    {
+        string target = "field_data_type";
         var properties = JObject.Parse(@"
         {
             ""input"": ""TEST_INPUT"",
@@ -274,11 +809,14 @@ public class DBInfo_CreateInstance
         }
         ");
 
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+        var ex = Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
+
+        // 結果確認
+        Assert.Contains(DesiredPropertiesHelper.ErrorRetrievingProperty(target, DesiredPropertiesHelper.CannotConvert), ex.Message);
     }
 
-    [Fact(DisplayName = "No.62 引数 jobj のfield_data_type プロパティに受け入れ不可能な文字列（\"automatic\", \"string_all\"以外の文字列）が設定される")]
-    public void Case062()
+    [Fact(DisplayName = "No.58_正常系：デフォルト値の確認_\"field_data_type\"が存在しない")]
+    public void Case058()
     {
         var properties = JObject.Parse(@"
         {
@@ -290,61 +828,23 @@ public class DBInfo_CreateInstance
             ""use_header"": true,
             ""use_data"": true,
             ""set_usertimestamp"": true,
-            ""timestamp_index"": 0,
-            ""field_data_type"": ""INVALID_VALUE""
-        }
-        ");
-
-        Assert.ThrowsAny<Exception>(() => DBInfo.CreateInstance(properties));
-    }
-
-    [Fact(DisplayName = "No.63 引数 jobj に 受け入れ可能な形のJSONオブジェクトが設定される（\"set_usertimestamp\"プロパティがfalse, \"field_data_type\"プロパティの指定がないパターン）")]
-    public void Case063()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""input"": ""TEST_INPUT1"",
-            ""measurement"": ""TEST_MEASUREMENT"",
-            ""tags"": {
-                ""tag1"": ""TEST_TAG1_STR""
-            },
-            ""use_header"": true,
-            ""use_data"": true,
-            ""set_usertimestamp"": false
+            ""timestamp_index"": 1
         }
         ");
 
         var instance = DBInfo.CreateInstance(properties);
-        Assert.NotNull(instance);
-        Assert.IsType<DBInfo>(instance);
 
-        var actualJson = JsonConvert.SerializeObject(instance, Formatting.None);
-        var expectedJson = JsonConvert.SerializeObject(JsonConvert.DeserializeObject(@"
-        {
-            ""Input"": ""TEST_INPUT1"",
-            ""Measurement"": ""TEST_MEASUREMENT"",
-            ""TagList"": [
-                {
-                    ""TagName"": ""TEST_TAG1_STR""
-                }
-            ],
-            ""UseHeader"": true,
-            ""UseData"": true,
-            ""SetUserTimestamp"": false,
-            ""TimestampType"": 0,
-            ""TimestampIndex"": 0,
-            ""FieldDataType"": 0
-        }
-        "), Formatting.None);
-        Assert.Equal(expectedJson, actualJson);
+        // 結果確認
+        Assert.Equal(DBInfo.FieldDataTypeMode.automatic, instance.FieldDataType);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
     }
 
-    [Fact(DisplayName = "No.64 引数 jobj に 受け入れ可能な形のJSONオブジェクトが設定される（\"set_usertimestamp\"プロパティがtrue, \"field_data_type\"プロパティの指定がないパターン）")]
-    public void Case064()
+    [Fact(DisplayName = "No.59_正常系：正常値の確認（string型）_\"field_data_type\"が\"automatic\"")]
+    public void Case059()
     {
         var properties = JObject.Parse(@"
         {
-            ""input"": ""TEST_INPUT1"",
+            ""input"": ""TEST_INPUT"",
             ""measurement"": ""TEST_MEASUREMENT"",
             ""tags"": {
                 ""tag1"": ""TEST_TAG1_STR""
@@ -352,84 +852,24 @@ public class DBInfo_CreateInstance
             ""use_header"": true,
             ""use_data"": true,
             ""set_usertimestamp"": true,
-            ""timestamp_index"": 2
-        }
-        ");
-
-        var instance = DBInfo.CreateInstance(properties);
-        Assert.NotNull(instance);
-        Assert.IsType<DBInfo>(instance);
-
-        var actualJson = JsonConvert.SerializeObject(instance, Formatting.None);
-        var expectedJson = JsonConvert.SerializeObject(JsonConvert.DeserializeObject(@"
-        {
-            ""Input"": ""TEST_INPUT1"",
-            ""Measurement"": ""TEST_MEASUREMENT"",
-            ""TagList"": [
-                {
-                    ""TagName"": ""TEST_TAG1_STR""
-                }
-            ],
-            ""UseHeader"": true,
-            ""UseData"": true,
-            ""SetUserTimestamp"": true,
-            ""TimestampType"": 1,
-            ""TimestampIndex"": 2,
-            ""FieldDataType"": 0
-        }
-        "), Formatting.None);
-        Assert.Equal(expectedJson, actualJson);
-    }
-
-    [Fact(DisplayName = "No.65 引数 jobj に 受け入れ可能な形のJSONオブジェクトが設定される（\"field_data_type\"プロパティに\"automatic\"が指定されるパターン）")]
-    public void Case065()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""input"": ""TEST_INPUT1"",
-            ""measurement"": ""TEST_MEASUREMENT"",
-            ""tags"": {
-                ""tag1"": ""TEST_TAG1_STR""
-            },
-            ""use_header"": true,
-            ""use_data"": true,
-            ""set_usertimestamp"": true,
-            ""timestamp_index"": 2,
+            ""timestamp_index"": 1,
             ""field_data_type"": ""automatic""
         }
         ");
 
         var instance = DBInfo.CreateInstance(properties);
-        Assert.NotNull(instance);
-        Assert.IsType<DBInfo>(instance);
 
-        var actualJson = JsonConvert.SerializeObject(instance, Formatting.None);
-        var expectedJson = JsonConvert.SerializeObject(JsonConvert.DeserializeObject(@"
-        {
-            ""Input"": ""TEST_INPUT1"",
-            ""Measurement"": ""TEST_MEASUREMENT"",
-            ""TagList"": [
-                {
-                    ""TagName"": ""TEST_TAG1_STR""
-                }
-            ],
-            ""UseHeader"": true,
-            ""UseData"": true,
-            ""SetUserTimestamp"": true,
-            ""TimestampType"": 1,
-            ""TimestampIndex"": 2,
-            ""FieldDataType"": 0
-        }
-        "), Formatting.None);
-        Assert.Equal(expectedJson, actualJson);
+        // 結果確認
+        Assert.Equal(DBInfo.FieldDataTypeMode.automatic, instance.FieldDataType);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
     }
 
-    [Fact(DisplayName = "No.66 引数 jobj に 受け入れ可能な形のJSONオブジェクトが設定される（\"field_data_type\"プロパティに\"string_all\"が指定されるパターン）")]
-    public void Case066()
+    [Fact(DisplayName = "No.60_正常系：正常値の確認（string型）_\"field_data_type\"が\"string_all\"")]
+    public void Case060()
     {
         var properties = JObject.Parse(@"
         {
-            ""input"": ""TEST_INPUT1"",
+            ""input"": ""TEST_INPUT"",
             ""measurement"": ""TEST_MEASUREMENT"",
             ""tags"": {
                 ""tag1"": ""TEST_TAG1_STR""
@@ -437,155 +877,65 @@ public class DBInfo_CreateInstance
             ""use_header"": true,
             ""use_data"": true,
             ""set_usertimestamp"": true,
-            ""timestamp_index"": 2,
+            ""timestamp_index"": 1,
             ""field_data_type"": ""string_all""
         }
         ");
 
         var instance = DBInfo.CreateInstance(properties);
-        Assert.NotNull(instance);
-        Assert.IsType<DBInfo>(instance);
 
-        var actualJson = JsonConvert.SerializeObject(instance, Formatting.None);
-        var expectedJson = JsonConvert.SerializeObject(JsonConvert.DeserializeObject(@"
+        // 結果確認
+        Assert.Equal(DBInfo.FieldDataTypeMode.string_all, instance.FieldDataType);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
+    }
+
+    [Fact(DisplayName = "No.134_正常系：正常値の確認（string型）_\"field_data_type\"が\"AUTOMATIC\"")]
+    public void Case134()
+    {
+        var properties = JObject.Parse(@"
         {
-            ""Input"": ""TEST_INPUT1"",
-            ""Measurement"": ""TEST_MEASUREMENT"",
-            ""TagList"": [
-                {
-                    ""TagName"": ""TEST_TAG1_STR""
-                }
-            ],
-            ""UseHeader"": true,
-            ""UseData"": true,
-            ""SetUserTimestamp"": true,
-            ""TimestampType"": 1,
-            ""TimestampIndex"": 2,
-            ""FieldDataType"": 1
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1,
+            ""field_data_type"": ""AUTOMATIC""
         }
-        "), Formatting.None);
-        Assert.Equal(expectedJson, actualJson);
+        ");
+
+        var instance = DBInfo.CreateInstance(properties);
+
+        // 結果確認
+        Assert.Equal(DBInfo.FieldDataTypeMode.automatic, instance.FieldDataType);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
     }
 
-    #region 単体テスト仕様書外の既存テスト
-    [Fact(DisplayName = "正常系:DBInfoインスタンス生成")]
-    public void SimpleValue_DBInfoCreated()
+    [Fact(DisplayName = "No.135_正常系：正常値の確認（string型）_\"field_data_type\"が\"STRING_ALL\"")]
+    public void Case135()
     {
-        //set_usertimestampがある:正常
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        DBInfo result = DBInfo.CreateInstance(inputRouteMsg);
-        Assert.IsAssignableFrom<DBInfo>(result);
-    }
+        var properties = JObject.Parse(@"
+        {
+            ""input"": ""TEST_INPUT"",
+            ""measurement"": ""TEST_MEASUREMENT"",
+            ""tags"": {
+                ""tag1"": ""TEST_TAG1_STR""
+            },
+            ""use_header"": true,
+            ""use_data"": true,
+            ""set_usertimestamp"": true,
+            ""timestamp_index"": 1,
+            ""field_data_type"": ""STRING_ALL""
+        }
+        ");
 
-    [Fact(DisplayName = "異常系:set_usertimestampがない → 例外")]
-    public void set_usertimestamp_notexist_ExceptionThrown()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        Assert.Throws<Exception>(() => DBInfo.CreateInstance(inputRouteMsg));
-    }
+        var instance = DBInfo.CreateInstance(properties);
 
-    [Fact(DisplayName = "正常系:set_usertimestampがtrue")]
-    public void set_usertimestamp_exist_True()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        DBInfo result = DBInfo.CreateInstance(inputRouteMsg);
-        Assert.True(result.SetUserTimestamp);
+        // 結果確認
+        Assert.Equal(DBInfo.FieldDataTypeMode.string_all, instance.FieldDataType);
+        AssertLogContains(LoggerHelper.EndMethod("CreateInstance"));
     }
-
-    [Fact(DisplayName = "正常系:set_usertimestampがfalse")]
-    public void set_usertimestamp_exist_False()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": false,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        DBInfo result = DBInfo.CreateInstance(inputRouteMsg);
-        Assert.False(result.SetUserTimestamp);
-    }
-
-    [Fact(DisplayName = "正常系:set_usertimestampがtrue,timestamp_indexがある,usertimestampがない → timestamp_indexが反映")]
-    public void timestamp_index_exist_TypeIndex()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 1,\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        DBInfo result = DBInfo.CreateInstance(inputRouteMsg);
-        Assert.Equal(1, result.TimestampIndex);
-        Assert.Equal(DBInfo.UserTimestampType.timestamp_index, result.TimestampType);
-    }
-
-    [Fact(DisplayName = "正常系:set_usertimestampがtrue,timestamp_indexがある,usertimestampがある → timestamp_indexが反映")]
-    public void eachtimestamp_exist_TypeIndex()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        DBInfo result = DBInfo.CreateInstance(inputRouteMsg);
-        Assert.Equal(1, result.TimestampIndex);
-        Assert.Equal(DBInfo.UserTimestampType.timestamp_index, result.TimestampType);
-    }
-
-    [Fact(DisplayName = "異常系:set_usertimestampがtrue,timestamp_indexがない,usertimestampがない → 例外")]
-    public void neithertimestamp_exist_ExceptionThrown()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        Assert.Throws<Exception>(() => DBInfo.CreateInstance(inputRouteMsg));
-    }
-
-    //set_usertimestampがtrue,timestamp_indexが1:正常
-    [Fact(DisplayName = "正常系:set_usertimestampがtrue,timestamp_indexが1")]
-    public void timestamp_index_Value1()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        DBInfo result = DBInfo.CreateInstance(inputRouteMsg);
-        Assert.Equal(1, result.TimestampIndex);
-    }
-
-    //set_usertimestampがtrue,timestamp_indexが0:異常
-    [Fact(DisplayName = "異常系:set_usertimestampがtrue,timestamp_indexが0")]
-    public void timestamp_index_Value0_ExceptionThrown()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 0,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        Assert.Throws<Exception>(() => DBInfo.CreateInstance(inputRouteMsg));
-    }
-
-    [Fact(DisplayName = "異常系:set_usertimestampがtrue,timestamp_indexがABC")]
-    public void timestamp_index_ValueAny_ExceptionThrown()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": \"ABC\",\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        Assert.Throws<FormatException>(() => DBInfo.CreateInstance(inputRouteMsg));
-    }
-
-    [Fact(DisplayName = "正常系:field_data_typeがない")]
-    public void field_data_type_notexist_DefaultVal()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}}}");
-        DBInfo result = DBInfo.CreateInstance(inputRouteMsg);
-        Assert.Equal(DBInfo.FieldDataTypeMode.automatic, result.FieldDataType);
-    }
-
-    [Fact(DisplayName = "正常系:field_data_typeがstring_all")]
-    public void field_data_type_exist_string_all()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"string_all\"}");
-        DBInfo result = DBInfo.CreateInstance(inputRouteMsg);
-        Assert.Equal(DBInfo.FieldDataTypeMode.string_all, result.FieldDataType);
-    }
-
-    [Fact(DisplayName = "正常系:field_data_typeがautomatic")]
-    public void field_data_type_exist_automatic()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"automatic\"}");
-        DBInfo result = DBInfo.CreateInstance(inputRouteMsg);
-        Assert.Equal(DBInfo.FieldDataTypeMode.automatic, result.FieldDataType);
-    }
-
-    [Fact(DisplayName = "異常系:field_data_typeがABC")]
-    public void field_data_type_anystring_ExceptionTrown()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": \"ABC\"}");
-        Assert.Throws<Exception>(() => DBInfo.CreateInstance(inputRouteMsg));
-    }
-
-    //field_data_typeが0:異常
-    [Fact(DisplayName = "異常系:field_data_typeが0")]
-    public void field_data_type_anynumber_ExceptionTrown()
-    {
-        JObject inputRouteMsg = JObject.Parse("{\"input\": \"cfrOut1\",\"measurement\": \"measurement1\",\"use_header\": false,\"use_data\": true,\"set_usertimestamp\": true,\"timestamp_index\": 1,\"usertimestamp\": \"2022/02/22 10:00:00\",\"tags\": {\"tag1\": \"col1\",\"tag2\": {\"tag_name\": \"col2\",\"value_type\": \"MessageProperty\"}},\"field_data_type\": 0}");
-        Assert.Throws<Exception>(() => DBInfo.CreateInstance(inputRouteMsg));
-    }
-    #endregion
 }
