@@ -1,44 +1,84 @@
-namespace IotedgeV2InfluxDBRegister.Test;
+﻿namespace IotedgeV2InfluxDBRegister.Test;
 
 [Collection(nameof(CollectionAttribute))]
 public class MyApplicationMain_OnDesiredPropertiesReceivedAsync
 {
     private readonly MyApplicationMain _app = new ();
+    private readonly ITestOutputHelper _output;
+    private readonly MultiTextWriter _logWriter;
 
-    [Fact(DisplayName = "No.27 desiredProperties が空で設定される")]
-    public async Task Case027()
+    public MyApplicationMain_OnDesiredPropertiesReceivedAsync(ITestOutputHelper output)
     {
+        _output = output;
+        _logWriter = LoggerHelper.SetupMyApplicationMainLogger();
+    }
+
+    private void AssertLogContains(string expected)
+    {
+        LoggerHelper.AssertLogContains(_logWriter, _output, expected);
+    }
+
+    [Fact(DisplayName = "No.22_異常系：必須項目の確認_\"dbparam1\"が存在しない")]
+    public async Task Case022()
+    {
+        // 空のDesiredProperties
         var properties = JObject.Parse("{}");
 
         var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
+
+        // 結果確認
         Assert.False(result);
+        AssertLogContains("DesiredProperties is empty.");
     }
 
-    [Fact(DisplayName = "No.28 desiredProperties の dbparams1 に文字列（非オブジェクト）が設定される")]
-    public async Task Case028()
+    [Fact(DisplayName = "No.23_異常系：不正値の確認（object型）_\"dbparam1\"が存在せず、\"dbparam2\"が存在する")]
+    public async Task Case023()
     {
+        // "dbparam1"が存在せず、"dbparam2"が存在する
+        var properties = JObject.Parse(@"
+        {
+            ""dbparam2"": {
+                ""input"": ""TEST_INPUT"",
+                ""measurement"": ""TEST_MEASUREMENT"",
+                ""tags"": {
+                    ""tag1"": ""TEST_TAG1_STR""
+                },
+                ""use_header"": true,
+                ""use_data"": true,
+                ""set_usertimestamp"": true,
+                ""timestamp_index"": 1
+            }
+        }
+        ");
+
+        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
+
+        // 結果確認
+        Assert.False(result);
+        AssertLogContains("DesiredProperties is empty.");
+    }
+
+    [Fact(DisplayName = "No.24_異常系：不正値の確認（object型）_\"dbparam1\"がオブジェクト以外")]
+    public async Task Case024()
+    {
+        // "dbparam1"がオブジェクト以外
         var properties = JObject.Parse("{ \"dbparam1\": \"\" }");
 
         var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
+
+        // 結果確認
         Assert.False(result);
+        AssertLogContains("Property dbparam1 is invalid.");
     }
 
-    [Fact(DisplayName = "No.29 desiredProperties の dbparams1 に空オブジェクトが設定される")]
-    public async Task Case029()
+    [Fact(DisplayName = "No.25_正常系：正常値の確認（object型）_\"dbparam1\"が存在し、正常終了する")]
+    public async Task Case025()
     {
-        var properties = JObject.Parse("{ \"dbparam1\": { } }");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.30 desiredProperties の dbparams1.input にオブジェクト（非文字列）が設定される")]
-    public async Task Case030()
-    {
+        // "dbparam1"が存在する
         var properties = JObject.Parse(@"
         {
             ""dbparam1"": {
-                ""input"": {},
+                ""input"": ""TEST_INPUT"",
                 ""measurement"": ""TEST_MEASUREMENT"",
                 ""tags"": {
                     ""tag1"": ""TEST_TAG1_STR""
@@ -52,387 +92,47 @@ public class MyApplicationMain_OnDesiredPropertiesReceivedAsync
         ");
 
         var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
 
-    [Fact(DisplayName = "No.31 desiredProperties の dbparams1.measurement にオブジェクト（非文字列）が設定される")]
-    public async Task Case031()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": {},
-                ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 1
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.32 desiredProperties の dbparams1.tags に空オブジェクトが設定される")]
-    public async Task Case032()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {},
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 1
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.33 desiredProperties の dbparams1.tags.tag1 にJSON配列（非文字列 or オブジェクト）が設定される")]
-    public async Task Case033()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": []
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 1
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.34 desiredProperties の dbparams1.tags.tag1.tag_name にオブジェクト（非文字列）が設定される")]
-    public async Task Case034()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": {
-                        ""tag_name"": {},
-                        ""value_type"": ""MessageProperty""
-                    }
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 1
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.35 desiredProperties の dbparams1.tags.tag1.value_type にオブジェクト（非文字列）が設定される")]
-    public async Task Case035()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": {
-                        ""tag_name"": ""TEST_TAG1_NAME"",
-                        ""value_type"": {}
-                    }
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 1
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.36 desiredProperties の dbparams1.tags.tag1.value_type に受け入れ不可能な文字列（\"MessagePropertyAndRowIndex\", \"MessageProperty\"以外の文字列）が設定される")]
-    public async Task Case036()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": {
-                        ""tag_name"": ""TEST_TAG1_NAME"",
-                        ""value_type"": ""INVALID_VALUE""
-                    }
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 1
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.37 desiredProperties の dbparams1.use_header にオブジェクト（非真偽値）が設定される")]
-    public async Task Case037()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
-                },
-                ""use_header"": {},
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 1
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.38 desiredProperties の dbparams1.use_data にオブジェクト（非真偽値）が設定される")]
-    public async Task Case038()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
-                },
-                ""use_header"": true,
-                ""use_data"": {},
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 1
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.39 desiredProperties の dbparams1.set_usertimestamp にオブジェクト（非真偽値）が設定される")]
-    public async Task Case039()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": {}
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.40 desiredProperties の dbparams1.set_usertimestamp に true が設定されている、かつ、dbparams1.timestamp_index に文字列（非整数値）が設定される")]
-    public async Task Case040()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": ""INVALID_TYPE""
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.41 desiredProperties の dbparams1.set_usertimestamp に true が設定されている、かつ、dbparams1.timestamp_index に0（0以下の値）が設定される")]
-    public async Task Case041()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 0
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.42 desiredProperties の dbparams1.field_data_type にオブジェクト（非文字列）が設定される")]
-    public async Task Case042()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 1,
-                ""field_data_type"": {}
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.43 desiredProperties の dbparams1.field_data_type に受け入れ不可能な文字列（\"automatic\", \"string_all\"以外の文字列）が設定される")]
-    public async Task Case043()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 0,
-                ""field_data_type"": ""INVALID_VALUE""
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.False(result);
-    }
-
-    [Fact(DisplayName = "No.44,45 desiredProperties に dbparamsx が 1件 受け入れ可能な形で設定される")]
-    public async Task Case044()
-    {
-        var properties = JObject.Parse(@"
-        {
-            ""dbparam1"": {
-                ""input"": ""TEST_INPUT1"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 5
-            }
-        }
-        ");
-
-        var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
+        // 結果確認
         Assert.True(result);
-
-        var settings = typeof(MyApplicationMain).GetProperty("DBInfos", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null) as List<DBInfo>;
-        Assert.Equal(1, settings?.Count);
+        AssertLogContains(LoggerHelper.EndMethod("OnDesiredPropertiesReceivedAsync"));
     }
 
-    [Fact(DisplayName = "No.46,47 desiredProperties に dbparamsx が 3件 受け入れ可能な形で設定される")]
-    public async Task Case046()
+    [Fact(DisplayName = "No.26_正常系：正常値の確認（object型）_\"dbparam1\"、\"dbparam2\"が存在し、正常終了する")]
+    public async Task Case026()
     {
+        // "dbparam1"、"dbparam2"が存在する
         var properties = JObject.Parse(@"
         {
             ""dbparam1"": {
                 ""input"": ""TEST_INPUT1"",
-                ""measurement"": ""TEST_MEASUREMENT"",
+                ""measurement"": ""TEST_MEASUREMENT1"",
                 ""tags"": {
                     ""tag1"": ""TEST_TAG1_STR""
                 },
                 ""use_header"": true,
                 ""use_data"": true,
                 ""set_usertimestamp"": true,
-                ""timestamp_index"": 5
+                ""timestamp_index"": 1
             },
             ""dbparam2"": {
                 ""input"": ""TEST_INPUT2"",
-                ""measurement"": ""TEST_MEASUREMENT"",
+                ""measurement"": ""TEST_MEASUREMENT2"",
                 ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
+                    ""tag1"": ""TEST_TAG2_STR""
                 },
                 ""use_header"": true,
                 ""use_data"": true,
                 ""set_usertimestamp"": true,
-                ""timestamp_index"": 5
-            },
-            ""dbparam3"": {
-                ""input"": ""TEST_INPUT3"",
-                ""measurement"": ""TEST_MEASUREMENT"",
-                ""tags"": {
-                    ""tag1"": ""TEST_TAG1_STR""
-                },
-                ""use_header"": true,
-                ""use_data"": true,
-                ""set_usertimestamp"": true,
-                ""timestamp_index"": 5
+                ""timestamp_index"": 1
             }
         }
         ");
 
         var result = await _app.OnDesiredPropertiesReceivedAsync(properties);
-        Assert.True(result);
 
-        var settings = typeof(MyApplicationMain).GetProperty("DBInfos", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null) as List<DBInfo>;
-        Assert.Equal(3, settings?.Count);
+        // 結果確認
+        Assert.True(result);
+        AssertLogContains(LoggerHelper.EndMethod("OnDesiredPropertiesReceivedAsync"));
     }
 }

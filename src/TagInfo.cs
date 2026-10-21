@@ -35,41 +35,10 @@ namespace IotedgeV2InfluxDBRegister
             {
                 JObject jobj = (JObject)jtok;
                 // tag_name
-                try
-                {
-                    ret.TagName = Util.GetRequiredValue<string>(jobj, "tag_name");
-                }
-                catch (Exception)
-                {
-                    var errmsg = $"Property 'tag_name' does not exist.";
-                    MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"{errmsg}", true);
-                    MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                    throw;
-                }
+                ret.TagName = Util.GetDesiredProperty<string>(jobj, "tag_name", true);
+                
                 // value_type
-                string typestr = null;
-                try
-                {
-                    typestr = Util.GetRequiredValue<string>(jobj, "value_type").ToUpper();
-                }
-                catch (Exception)
-                {
-                    var errmsg = $"Property value_type does not exist.";
-                    MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"{errmsg}", true);
-                    MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                    throw;
-                }
-
-                if (Enum.TryParse<ValueType>(typestr,true, out ValueType value))
-                {
-                    ret.TagValueType = value;
-                }
-                else
-                {
-                    var errmsg = $"Property 'value_type' is not an expected string.";
-                    MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: CreateInstance caused by {errmsg}");
-                    throw new Exception(errmsg);
-                }
+                ret.TagValueType=Util.GetDesiredProperty<ValueType>(jobj, "value_type", true);
             }
 
             MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"End Method: CreateInstance");

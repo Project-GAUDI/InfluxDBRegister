@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using TICO.GAUDI.Commons;
@@ -13,19 +15,47 @@ namespace IotedgeV2InfluxDBRegister
     internal class MyApplicationMain : IApplicationMain
     {
         static ILogger MyLogger { get; } = LoggerFactory.GetLogger(typeof(MyApplicationMain));
+        private int _disposed = 0; // 0: false, 1: true
         const string DB_INFO_KEY = "dbparam";
         static List<DBInfo> DBInfos { get; set; } = null;
         static SQLParser SQLparser { get; set; } = new SQLParser();
 
-        public void Dispose()
+         /// <summary>
+        /// リソース解放
+        /// </summary>
+        /// <returns></returns>
+        public async ValueTask DisposeAsync()
         {
-            MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Start Method: Dispose");
+            MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Start Method: DisposeAsync");
 
-            MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"End Method: Dispose");
+            // 2重実行防止
+            if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            {
+                MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: Already disposed, skipping DisposeAsync");
+                return;
+            }
+
+            try
+            {
+                // ここでApplicationMainのリソース解放処理を行う
+                // 非同期リソースがある場合は適切に解放する
+                // ＝＝＝＝＝＝＝＝＝＝＝＝＝ここから＝＝＝＝＝＝＝＝＝＝＝＝＝
+
+                await Task.CompletedTask; // 非同期リソース解放処理をここに記述
+
+                // ＝＝＝＝＝＝＝＝＝＝＝＝＝ここまで＝＝＝＝＝＝＝＝＝＝＝＝＝
+            }
+            catch (Exception ex)
+            {
+                MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"Error in DisposeAsync: {ex.Message}", true);
+                // 例外は再スローしない（Disposeでは通常例外を抑制）
+            }
+
+            MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"End Method: DisposeAsync");
         }
 
         /// <summary>
-        /// アプリケーション初期化					
+        /// アプリケーション初期化
         /// システム初期化前に呼び出される
         /// </summary>
         /// <returns></returns>
@@ -39,23 +69,21 @@ namespace IotedgeV2InfluxDBRegister
             bool retStatus = true;
             try
             {
-                string userenv = Environment.GetEnvironmentVariable("UserName");
-                string passenv = Environment.GetEnvironmentVariable("Password");
-                string dbenv = Environment.GetEnvironmentVariable("DBName");
-                string urienv = Environment.GetEnvironmentVariable("URI");
-                Int32.TryParse(Environment.GetEnvironmentVariable("Interval"), out int interval);
-                SQLparser.InitParser(userenv, passenv, dbenv, urienv, interval);
+                string userenv = Util.GetEnvironmentVariable<string>("UserName", false);
+                string passenv = Util.GetEnvironmentVariable<string>("Password", false);
+                string dbenv = Util.GetEnvironmentVariable<string>("DBName", true);
+                string urienv = Util.GetEnvironmentVariable<string>("URI", true);
+                int interval = Util.GetEnvironmentVariable<int>("Interval", true, 0,condition: x => x >= 0);
+                await SQLParser.InitParserAsync(userenv, passenv, dbenv, urienv, interval).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 var errmsg = "Environment parameter error.";
-                MyLogger.WriteLog(ILogger.LogLevel.WARN, $"{errmsg} Exception:{ex}");
+                MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"{errmsg} Exception:{ex}");
                 MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: InitializeAsync caused by {errmsg}");
                 retStatus = false;
                 return retStatus;
             }
-
-            await Task.CompletedTask;
             // ＝＝＝＝＝＝＝＝＝＝＝＝＝ここまで＝＝＝＝＝＝＝＝＝＝＝＝＝
 
             MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"End Method: InitializeAsync");
@@ -131,7 +159,7 @@ namespace IotedgeV2InfluxDBRegister
             {
                 try
                 {
-                    JObject jobj = Util.GetRequiredValue<JObject>(desiredProperties, DB_INFO_KEY + i.ToString("D"));
+                    JObject jobj = Util.GetDesiredProperty<JObject>(desiredProperties, DB_INFO_KEY + i.ToString("D"), true);
                     DBInfos.Add(DBInfo.CreateInstance(jobj));
                 }
                 catch (Exception ex)
@@ -196,29 +224,32 @@ namespace IotedgeV2InfluxDBRegister
 
                 DBInfo dbinfo = (DBInfo)userContext;
                 MyLogger.WriteLog(ILogger.LogLevel.DEBUG, $"Received message.  input name='{dbinfo.Input}'");
-
+                
                 var msgProps = message.GetProperties();
                 var input = GaudiMessage.CreateInstance(messageString);
-
-                // InfluxDBへデータを追加
+          
                 int rowIndex = 0;
                 if (input == null || input.RecordList == null || input.RecordList.Count <= 0)
                 {
                     // RecordListが0件の場合、ブランクフィールドで1行追加
-                    InsertInfluxDB(dbinfo, msgProps);
-                    rowIndex++;
+                    if(InsertInfluxDB(dbinfo, msgProps))
+                    {
+                        rowIndex++;    
+                    }                
                 }
                 else
                 {
                     // RecordListが1件以上ある場合、RecordListの件数分追加
                     foreach (var record in input.RecordList)
                     {
-                        InsertInfluxDB(dbinfo, msgProps, record, rowIndex);
-                        rowIndex++;
+                        if(InsertInfluxDB(dbinfo, msgProps, record, rowIndex))
+                        {
+                            rowIndex++;    
+                        }                
                     }
                 }
-                MyLogger.WriteLog(ILogger.LogLevel.DEBUG, $"Insert {rowIndex} records.  input name='{dbinfo.Input}'");
-
+                MyLogger.WriteLog(ILogger.LogLevel.INFO, $"Insert {rowIndex} records.  input name='{dbinfo.Input}'");
+            
             }
             catch (Exception ex)
             {
@@ -240,11 +271,12 @@ namespace IotedgeV2InfluxDBRegister
         /// <param name="msgProps"></param>
         /// <param name="record"></param>
         /// <param name="rowIndex"></param>
-        private static void InsertInfluxDB(DBInfo dbinfo, IDictionary<string, string> msgProps, GaudiMessage.GaudiRecord record = null, int rowIndex = -1)
+        private static bool InsertInfluxDB(DBInfo dbinfo, IDictionary<string, string> msgProps, GaudiMessage.GaudiRecord record = null, int rowIndex = -1)
         {
             MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Start Method: InsertInfluxDB");
             Dictionary<string, string> tags = new Dictionary<string, string>();
             Dictionary<string, object> fields = new Dictionary<string, object>();
+            bool retStatus = false;
 
             // タグ情報作成
             foreach (var tag in dbinfo.TagList)
@@ -300,18 +332,31 @@ namespace IotedgeV2InfluxDBRegister
                     MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"fieldinfo add : Key [ 1 ] Value [ {s} ]");
             }
 
-            DateTime? timestampValue = null;
-
+            DateTime? timestampValue;
             // InfluxDBインサート
             switch (dbinfo.TimestampType)
             {
                 case DBInfo.UserTimestampType.timestamp_index:
                     int targetIndex = dbinfo.TimestampIndex - 1;
-
-                    if (record.RecordData.Count <= targetIndex)
+                    if (tags.GetValueOrDefault("type")== "eof")
                     {
-                        // throw new Exception($"Out of index on RecordData. RecordData Count: {record.RecordData.Count}, specified: {targetIndex}");
+                        // eofデータ対応
+                        MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"InsertInfluxDB get eof data {record}");
                         timestampValue = null;
+                    }
+                    else if (record == null)
+                    {
+                        var errmsg = $"RecordData and RecordHeader is null.";
+                        MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"InsertInfluxDB failed caused by {errmsg}");
+                        MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: InsertInfluxDB caused by {errmsg}");
+                        return retStatus;
+                    }
+                    else if (record.RecordData.Count <= targetIndex)
+                    {
+                        var errmsg = $"Out of index on RecordData. RecordData Count: {record.RecordData.Count}, specified: {targetIndex}";
+                        MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"InsertInfluxDB failed caused by {errmsg}");
+                        MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: InsertInfluxDB caused by {errmsg}");
+                        return retStatus;
                     }
                     else
                     {
@@ -322,21 +367,19 @@ namespace IotedgeV2InfluxDBRegister
                         catch
                         {
                             var errmsg = $"Unexpected data type: {record.RecordData[targetIndex]}.";
+                            MyLogger.WriteLog(ILogger.LogLevel.ERROR, $"InsertInfluxDB failed caused by {errmsg}");
                             MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"Exit Method: InsertInfluxDB caused by {errmsg}");
-                            throw new Exception(errmsg);
+                            return retStatus;
                         }
                     }
                     break;
-                // case DBInfo.UserTimestampType.usertimestamp:
-                //     timestampValue = dbinfo.TimestampValue;
-                //     break;
                 default:
                     timestampValue = null;
                     break;
             }
-
-            SQLParser.InsertDB(dbinfo.Measurement, fields, tags, timestampValue);
+            retStatus = SQLParser.InsertDB(dbinfo.Measurement, fields, tags, timestampValue);
             MyLogger.WriteLog(ILogger.LogLevel.TRACE, $"End Method: InsertInfluxDB");
+            return retStatus;
         }
 
     }

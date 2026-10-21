@@ -22,15 +22,18 @@
 * [ユースケース](#ユースケース)
   * [ケース ①](#Usecase1)
   * [ケース ②](#Usecase2)
+  * [ケース ③](#Usecase3)
 * [Feedback](#feedback)
 * [LICENSE](#license)
 
 ## 概要
+
 InfluxDBRegisterは、入力されたメッセージをInfluxDBに格納するAzure IoT edgeモジュールです。
 
 ## 機能
 
-* 入力されたメッセージをInfluxDBに格納する
+受信したメッセージをInfluxDBに格納する。  
+※ 本モジュールとInfluxDBを別ホスト上で構築する場合、ネットワークエラー時に受信メッセージがDBに登録されずメッセージが破棄される可能性があるため、同一ホスト上で使用することを推奨する。
 
 ![schematic diagram](./docs/img/schematic_diagram.drawio.png)
 
@@ -73,9 +76,9 @@ docker push ghcr.io/<YOUR_GITHUB_USERNAME>/influxdbregister:<VERSION>
 
 ## 動作保証環境
 
-| Module Version | IoTEdge         | edgeAgent       | edgeHub         | amd64 verified on | arm64v8 verified on | arm32v7 verified on |
-| -------------- | --------------- | --------------- | --------------- | ----------------- | ------------------- | ------------------- |
-| 6.0.2          | 1.5.0<br>1.5.16 | 1.5.6<br>1.5.19 | 1.5.6<br>1.5.19 | ubuntu22.04       | －                  | －                  |
+| Module Version | IoTEdge | edgeAgent | edgeHub | amd64 verified on | arm64v8 verified on | arm32v7 verified on |
+| -------------- | ------- | --------- | ------- | ----------------- | ------------------- | ------------------- |
+| 7.0.1          | 1.6.4   | 1.6.4     | 1.6.4   | ubuntu24.04       | －                  | －                  |
 
 ## Deployment 設定値
 
@@ -83,35 +86,37 @@ docker push ghcr.io/<YOUR_GITHUB_USERNAME>/influxdbregister:<VERSION>
 
 #### 環境変数の値
 
-| Key                       | Required | Default | Recommend | Description                                                     |
-| ------------------------- | -------- | ------- | --------- | ---------------------------------------------------------------- |
-| URI                       | 〇       |         |           | HTTP リクエストする influxdb アドレス。                                                        |
-| DBName                    | 〇       |         |           | 問い合わせとデータ投入を行う influxdb の DB 名。                                               |
-| Interval                  | 〇       |         |           | influxdb の書き込み処理間隔(秒)。                                                                  |
-| TransportProtocol         |          | Amqp    |           | ModuleClient の接続プロトコル。<br>["Amqp", "Mqtt"] |
-| LogLevel                  |          | info    |           | 出力ログレベル。<br>["trace", "debug", "info", "warn", "error"] |
+| Key               | Type   | Required | Conditions                                  | Default | Description                             |
+| ----------------- | ------ | -------- | ------------------------------------------- | ------- | --------------------------------------- |
+| URI               | string | 〇       |                                             |         | HTTP リクエスト先の InfluxDB アドレス。 |
+| DBName            | string | 〇       |                                             |         | データ格納を行う InfluxDB の DB 名。    |
+| Interval          | number | 〇       | 0以上の整数                                 |         | InfluxDB の書き込み処理間隔(秒)。       |
+| TransportProtocol | string |          | ["Amqp", "Mqtt"]                            | Amqp    | ModuleClient の接続プロトコル。         |
+| LogLevel          | string |          | ["trace", "debug", "info", "warn", "error"] | info    | 出力ログレベル。                        |
 
 ### Desired Properties
 
 #### Desired Properties の値
 
-| JSON Key                      | Type    | Required | Default   | Recommend | Description |
-| ----------------------------- | ------- | -------- | --------- | --------- | --------------------------------------------------- |
-| dbparam[x]                    | object  | 〇       |           |           | [x]は連番の数字<br>監視するメッセージ情報。 |
-| &nbsp; input                  | string  | 〇       |           |           | 受信するメッセージのインプット名。 |
-| &nbsp; measurement            | string  | 〇       |           |           | influxdb の書き込み先テーブル名。 |
-| &nbsp; use_header             | boolean | 〇       |           |           | 受信するメッセージの RecordHeader 部の値使用可否。 |
-| &nbsp; use_data               | boolean | 〇       |           |           | 受信するメッセージの RecordData 部の値使用可否。 |
-| &nbsp; set_usertimestamp      | boolean | 〇       |           |           | false:ユーザタイムスタンプを指定しない。DB 挿入時の時刻をタイムスタンプとする。<br>true:ユーザタイムスタンプを指定する。timestamp_indexで指定されたインデックス位置のデータを用いて、タイプスタンプを設定する。 |
-| &nbsp; timestamp_index        | string  | △       |           |           | ユーザタイムスタンプとして登録する入力データのインデックス（カラム番号：１～）を指定。<br>※ set_usertimestampがtrueの場合に必須。 |
-| &nbsp; field_data_type        | string  |          | automatic |           | データの保存タイプを指定する。<br>&nbsp; "string_all": 全て文字列データとして保存する。<br>&nbsp; "automatic":自動決定。入力データの状態のまま保存する。動作は、InfluxDB の仕様に準じる。(※1) |
-| &nbsp; tags                   | object  | 〇       |           |           | influxdb に格納するタグ名称を列挙。 |
-| &nbsp;&nbsp; tag 設定方法 1    |         |          |           |           |           |
-| &nbsp;&nbsp; tag[y]           | string  | 〇       |           |           | [y]は 1 から始まる連番<br>MessageProperty 名を指定。 |
-| &nbsp;&nbsp; tag 設定方法 2    |         |          |           |           |           |
-| &nbsp;&nbsp; tag[y]           | object  | 〇       |           |           | [y]は 1 から始まる連番<br>MessageProperty 名と行番号のセットを指定。 |
-| &nbsp;&nbsp;&nbsp; tag_name   | string  | 〇       |           |           | MessageProperty 名。 |
-| &nbsp;&nbsp;&nbsp; value_type | string  | 〇       |           |           | MessageProperty: プロパティ値を出力<br>MessagePropertyAndRowIndex: プロパティ値に行番号を加算した値を出力。 |
+| JSON Key                      | Type    | Required | Conditions                                       | Default   | Description                                                                                                                                                                                                                                                                                |
+| ----------------------------- | ------- | -------- | ------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| dbparam[x]                    | object  | 〇       | [x]は1から始まる連番                             |           | 監視するメッセージ情報。                                                                                                                                                                                                                                                                   |
+| &emsp; input                  | string  | 〇       |                                                  |           | 受信するメッセージのインプット名。                                                                                                                                                                                                                                                         |
+| &emsp; measurement            | string  | 〇       |                                                  |           | InfluxDB の書き込み先テーブル名。                                                                                                                                                                                                                                                          |
+| &emsp; use_header             | boolean | 〇       |                                                  |           | 受信するメッセージの RecordHeader 部の値使用可否。                                                                                                                                                                                                                                         |
+| &emsp; use_data               | boolean | 〇       |                                                  |           | 受信するメッセージの RecordData 部の値使用可否。                                                                                                                                                                                                                                           |
+| &emsp; set_usertimestamp      | boolean | 〇       |                                                  |           | false：ユーザタイムスタンプを指定しない。DB 挿入時の時刻をタイムスタンプとする。<br>true：ユーザタイムスタンプを指定する。timestamp_indexで指定されたインデックス位置のデータを用いて、タイムスタンプを設定する。 <br>eofメッセージを受信した場合はDB 挿入時の時刻をタイムスタンプとする。 |
+| &emsp; timestamp_index        | number  | △        | set_usertimestamp=true時必須<br>1以上の整数      |           | ユーザタイムスタンプとして登録する入力データのインデックス（列番号：1～）を指定。<br>timestamp_indexがRecordDataの列数以下の場合、指定インデックスを使用。<br>範囲外の場合、受信メッセージは破棄される。                                                                                   |
+| &emsp; field_data_type        | string  |          | ["automatic","string_all"]                       | automatic | 受信するメッセージの RecordData 部の保存タイプを指定する。<br>&emsp; "string_all"：全て文字列データとして保存<br>&emsp; "automatic"：自動決定。入力データの状態のまま保存する。動作は、InfluxDB の仕様に準じる。(※1)                                                                       |
+| &emsp; tags                   | object  | 〇       |                                                  |           | InfluxDB に格納するタグ名称を列挙。                                                                                                                                                                                                                                                        |
+| &emsp;&emsp; tag 設定方法 1   |         |          |                                                  |           |                                                                                                                                                                                                                                                                                            |
+| &emsp;&emsp; tag[y]           | string  | 〇       | [y]は1から始まる連番                             |           | MessageProperty 名を指定。                                                                                                                                                                                                                                                                 |
+| &emsp;&emsp; tag 設定方法 2   |         |          |                                                  |           |                                                                                                                                                                                                                                                                                            |
+| &emsp;&emsp; tag[y]           | object  | 〇       | [y]は1から始まる連番                             |           | MessageProperty 名と行番号のセットを指定。                                                                                                                                                                                                                                                 |
+| &emsp;&emsp;&emsp; tag_name   | string  | 〇       |                                                  |           | MessageProperty 名を指定。                                                                                                                                                                                                                                                                 |
+| &emsp;&emsp;&emsp; value_type | string  | 〇       | ["MessageProperty","MessagePropertyAndRowIndex"] |           | MessageProperty：プロパティ値を出力<br>MessagePropertyAndRowIndex：プロパティ値に行番号を加算した値を出力                                                                                                                                                                                  |
+
+※1 4.0.0-rc1以前から4.0.0-rc1以降に設定変更なしでモジュールを更新した場合、"string_all"設定から"automatic"設定に変更した状態となり、既存のstringカラムに非stringのデータを書き込みにいき、エラーになる可能性があるため、ご注意ください。
 
 #### Desired Properties の記入例
 
@@ -152,9 +157,9 @@ docker push ghcr.io/<YOUR_GITHUB_USERNAME>/influxdbregister:<VERSION>
 
 #### startupOrder の値
 
-| JSON Key      | Type    | Required | Default | Recommend | Description |
-| ------------- | ------- | -------- | ------- | --------- | ----------- |
-| startupOrder  | uint    |  | 4294967295 | 300 | モジュールの起動順序。数字が小さいほど先に起動される。<br>["0"から"4294967295"] |
+| JSON Key     | Type   | Required | Conditions                   | Default    | Recommend | Description                                            |
+| ------------ | ------ | -------- | ---------------------------- | ---------- | --------- | ------------------------------------------------------ |
+| startupOrder | number |          | 0 以上 4294967295 以下の整数 | 4294967295 | 300       | モジュールの起動順序。数字が小さいほど先に起動される。 |
 
 #### startupOrder の記入例
 
@@ -166,17 +171,41 @@ docker push ghcr.io/<YOUR_GITHUB_USERNAME>/influxdbregister:<VERSION>
 
 ## 受信メッセージ
 
+GAUDI標準形式メッセージを処理の対象とする。
+
 ### Message Body
 
-| JSON Key            | Type   | Description        |
-| ------------------- | ------ | ------------------ |
-| RecordList          | object |                    |
-| &nbsp; RecordHeader | array  | ヘッダーレコード   |
-| &nbsp; RecordData   | array  | 1 レコードのデータ |
+任意
 
 ### Message Properties
 
 任意
+
+### Messageの例
+
+```json
+{
+  "Body": {
+    "RecordList": [
+      {
+        "RecordHeader":["example_sensor.xlsx","1"],
+        "RecordData":["2021/07/15 11:00:00", "AAA", …, "10"]
+      }
+    ]
+  },
+  "Properties": {
+    "filename":"example_sensor.xlsx",
+    "row_number":1,
+    "shot_count":1
+  }
+}
+```
+
+格納データ
+
+| DB      | measurement | time                | 1                     | 2     | 3   | 4    | type | row_number | shot_count |
+| ------- | ----------- | ------------------- | --------------------- | ----- | --- | ---- | ---- | ---------- | ---------- |
+| example | sensor      | 2021/07/15 11:00:10 | "2021/07/15 11:00:00" | "AAA" | ... | "10" |      | 1          | 1          |
 
 ## 送信メッセージ
 
@@ -258,13 +287,13 @@ docker push ghcr.io/<YOUR_GITHUB_USERNAME>/influxdbregister:<VERSION>
 
 ## ログ出力内容
 
-| LogLevel | 出力概要 |
-| -------- | -------- |
-| error    | [初期化/desired更新/desired取り込み/メッセージ受信]失敗         |
-| warn     | エッジランタイムとの接続リトライ失敗<br>環境変数の1部値不正         |
-| info     | 環境変数の値<br>desired更新通知<br>環境変数の値未設定のためDefault値適用<br>メッセージ[送信/受信]通知         |
-| debug    | 無し     |
-| trace    | メソッドの開始・終了<br>受信メッセージBody  |
+| LogLevel | 出力概要                                                                                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| error    | [初期化/リソース解放/モジュールツイン更新/メッセージ受信]失敗<br>[環境変数/モジュールツイン]の必須項目未設定<br>[環境変数/モジュールツイン]がConditionsまたはType制約違反 |
+| warn     | エッジランタイムとの接続リトライ失敗                                                                                                                                      |
+| info     | [環境変数/モジュールツイン]の値<br>モジュールツイン更新通知<br>[環境変数/モジュールツイン]の省略可能項目未設定のためDefault値適用<br>メッセージ受信通知                   |
+| debug    | 無し                                                                                                                                                                      |
+| trace    | リソース解放済み通知<br>メソッドの開始・終了<br>受信メッセージBody                                                                                                        |
 
 ## ユースケース
 
@@ -272,11 +301,36 @@ docker push ghcr.io/<YOUR_GITHUB_USERNAME>/influxdbregister:<VERSION>
 
 ### ケース①
 
-不定期間隔でアップロードされるCSVファイルのデータをInfluxDBに格納時の時刻で格納する。
+アップロードされるCSVファイルのデータを下記の条件で格納する。
+
+* タイムスタンプには格納時の時刻を使用する。
+* 受信メッセージBodyは全て文字列として格納する。
 
 ![schematic diagram](./docs/img/usecase_diagram.drawio.png)
 
-#### desiredProperties
+#### 起動順序 startupOrder
+
+| 名称         | 値  |
+| ------------ | --- |
+| startupOrder | 300 |
+
+#### 環境変数
+
+| 名称              | 値                     |
+| ----------------- | ---------------------- |
+| URI               | `http://influxdb:8086` |
+| DBName            | example                |
+| Interval          | 2                      |
+| TransportProtocol | Amqp                   |
+| LogLevel          | debug                  |
+
+#### コンテナーの作成オプション Create Option
+
+```json
+{}
+```
+
+#### モジュールツインの設定
 
 ```JSON
 {
@@ -293,26 +347,59 @@ docker push ghcr.io/<YOUR_GITHUB_USERNAME>/influxdbregister:<VERSION>
         "tag_name": "row_number",
         "value_type": "MessagePropertyAndRowIndex"
       },
-        "tag3": "shot_count",
+      "tag3": "shot_count"
     }
   }
 }
 
 ```
 
-#### 環境変数
+#### 入力内容
 
-| 名称                | 値                   |
-| ------------------- | -------------------- |
-| URI                 | http://influxdb:8086 |
-| DBName              | example              |
-| Interval            | 2                    |
-| TransportProtocol   | Amqp                 |
-| LogLevel            | debug                |
-| DefaultReceiveTopic | Iothub               |
-| M2MqttFlag          | false                |
-| SasToken            | ""                   |
-| TZ                  | Asia/Tokyo           |
+メッセージ1通目
+
+```json
+{
+  "Body": {
+    "RecordList": [
+      {
+        "RecordHeader":["example_sensor.xlsx","1"],
+        "RecordData":["2021/07/15 11:00:00", "AAA", …, "10"]
+      },
+      {
+        "RecordHeader":["example_sensor.xlsx","2"],
+        "RecordData":["2021/07/15 11:00:03", "AAB", …, "10"]
+      },
+      {
+        "RecordHeader":["example_sensor.xlsx","3"],
+        "RecordData":["2021/07/15 11:00:05", "ABA", …, "10"]
+      },
+      {
+        "RecordHeader":["example_sensor.xlsx","4"],
+        "RecordData":["2021/07/15 11:00:09", "ABB", …, "10"]
+      }
+    ]
+  },
+  "Properties": {
+    "filename":"example_sensor.xlsx",
+    "row_number":1,
+    "shot_count":1
+  }
+}
+```
+
+メッセージ2通目(eofメッセージ)
+
+```json
+{
+  "Properties": {
+    "filename":"example_sensor.xlsx",
+    "type": "eof",
+    "row_number":5,
+    "shot_count":1
+  }
+}
+```
 
 #### 出力結果
 
@@ -320,23 +407,48 @@ InfluxDBのレコード
 
 出力例: InfluxDBの格納データ
 
-| DB      | measurement | time                | tag  |            |            | field                 |       |      |      |
-| ------- | ----------- | ------------------- | ---- | ---------- | ---------- | --------------------- | ----- | ---- | ---- |
-| example | sensor      | 2022/07/15 10:00:00 | type | row_number | shot_count | "2021/07/15 11:00:00" | "AAA" | ...  | "10" |
-|         |             | 2022/07/15 10:00:01 | data | 1          | 1          | "2021/07/15 11:00:03" | "AAB" | ...  | "10" |
-|         |             | 2022/07/15 10:00:02 | data | 2          | 1          | "2021/07/15 11:00:05" | "ABA" | ...  | "10" |
-|         |             | 2022/07/15 10:00:03 | data | 3          | 1          | "2021/07/15 11:00:09" | "ABB" | ...  | "10" |
-|         |             | 2022/07/15 10:00:04 | eof  | 4          | 1          | None                  | None  | None | None |
+| DB      | measurement | time                | 1                     | 2     | 3    | 4    | type | row_number | shot_count |
+| ------- | ----------- | ------------------- | --------------------- | ----- | ---- | ---- | ---- | ---------- | ---------- |
+| example | sensor      | 2021/07/15 11:00:10 | "2021/07/15 11:00:00" | "AAA" | ...  | "10" |      | 1          | 1          |
+|         |             | 2021/07/15 11:00:12 | "2021/07/15 11:00:03" | "AAB" | ...  | "10" |      | 2          | 1          |
+|         |             | 2021/07/15 11:00:14 | "2021/07/15 11:00:05" | "ABA" | ...  | "10" |      | 3          | 1          |
+|         |             | 2021/07/15 11:00:16 | "2021/07/15 11:00:09" | "ABB" | ...  | "10" |      | 4          | 1          |
+|         |             | 2021/07/15 11:00:18 | None                  | None  | None | None | eof  | 5          | 1          |
 
 <a id="Usecase2"></a>
 
 ### ケース②
 
-不定期間隔でアップロードされるCSVファイルのデータをInfluxDBに格納データの時刻で格納する。
+GAUDINodeREDから受信した加工済みのCSVファイルデータを下記の条件で格納する。
 
-![schematic diagram](./docs/img/usecase_diagram.drawio.png)
+* 格納タイムスタンプにはモジュールツインtimestamp_indexで設定した受信メッセージのインデックスを使用する。
+* 受信メッセージBodyは型が保持されたまま格納する。
 
-#### desiredProperties
+![schematic diagram](./docs/img/usecase2_diagram.drawio.png)
+
+#### 起動順序 startupOrder
+
+| 名称         | 値  |
+| ------------ | --- |
+| startupOrder | 300 |
+
+#### 環境変数
+
+| 名称              | 値                     |
+| ----------------- | ---------------------- |
+| URI               | `http://influxdb:8086` |
+| DBName            | example                |
+| Interval          | 2                      |
+| TransportProtocol | Amqp                   |
+| LogLevel          | debug                  |
+
+#### コンテナーの作成オプション Create Option
+
+```json
+{}
+```
+
+#### モジュールツインの設定
 
 ```JSON
 {
@@ -354,26 +466,59 @@ InfluxDBのレコード
         "tag_name": "row_number",
         "value_type": "MessagePropertyAndRowIndex"
       },
-        "tag3": "shot_count",
+      "tag3": "shot_count"
     }
   }
 }
 
 ```
 
-#### 環境変数
+#### 入力内容
 
-| 名称                | 値                   |
-| ------------------- | -------------------- |
-| URI                 | http://influxdb:8086 |
-| DBName              | example              |
-| Interval            | 2                    |
-| TransportProtocol   | Amqp                 |
-| LogLevel            | debug                |
-| DefaultReceiveTopic | Iothub               |
-| M2MqttFlag          | false                |
-| SasToken            | ""                   |
-| TZ                  | Asia/Tokyo           |
+メッセージ1通目
+
+```json
+{
+  "Body": {
+    "RecordList": [
+      {
+        "RecordHeader":["example_sensor.xlsx","1"],
+        "RecordData":["2021/07/15 11:00:00", …, "10"]
+      },
+      {
+        "RecordHeader":["example_sensor.xlsx","2"],
+        "RecordData":["2021/07/15 11:00:03", …, "10"]
+      },
+      {
+        "RecordHeader":["example_sensor.xlsx","3"],
+        "RecordData":["2021/07/15 11:00:05", …, "10"]
+      },
+      {
+        "RecordHeader":["example_sensor.xlsx","4"],
+        "RecordData":["2021/07/15 11:00:09", …, "10"]
+      }
+    ]
+  },
+  "Properties": {
+    "filename":"example_sensor.xlsx",
+    "row_number":1,
+    "shot_count":1
+  }
+}
+```
+
+メッセージ2通目(eofメッセージ)
+
+```json
+{
+  "Properties": {
+    "filename":"example_sensor.xlsx",
+    "type": "eof",
+    "row_number":5,
+    "shot_count":1
+  }
+}
+```
 
 #### 出力結果
 
@@ -381,17 +526,135 @@ InfluxDBのレコード
 
 出力例: InfluxDBの格納データ
 
-| DB      | measurement | time                | tag  |            |            | field                 |      |      |
-| ------- | ----------- | ------------------- | ---- | ---------- | ---------- | --------------------- | ---- | ---- |
-| example | sensor      | 2021/07/15 11:00:00 | type | row_number | shot_count | "2021/07/15 11:00:00" | ...  | 10   |
-|         |             | 2021/07/15 11:00:03 | data | 1          | 1          | "2021/07/15 11:00:03" | ...  | 10   |
-|         |             | 2021/07/15 11:00:05 | data | 2          | 1          | "2021/07/15 11:00:05" | ...  | 10   |
-|         |             | 2021/07/15 11:00:09 | data | 3          | 1          | "2021/07/15 11:00:09" | ...  | 10   |
-|         |             | 2021/07/15 11:00:14 | eof  | 4          | 1          | None                  | None | None |
+| DB      | measurement | time                | 1                     | 2    | 3    | type | row_number | shot_count |
+| ------- | ----------- | ------------------- | --------------------- | ---- | ---- | ---- | ---------- | ---------- |
+| example | sensor      | 2021/07/15 11:00:00 | "2021/07/15 11:00:00" | ...  | 10   |      | 1          | 1          |
+|         |             | 2021/07/15 11:00:03 | "2021/07/15 11:00:03" | ...  | 10   |      | 2          | 1          |
+|         |             | 2021/07/15 11:00:05 | "2021/07/15 11:00:05" | ...  | 10   |      | 3          | 1          |
+|         |             | 2021/07/15 11:00:09 | "2021/07/15 11:00:09" | ...  | 10   |      | 4          | 1          |
+|         |             | 2021/07/15 11:00:14 | None                  | None | None | eof  | 5          | 1          |
 
+<a id="Usecase3"></a>
+
+### ケース③
+
+アップロードされるCSVファイルのデータを下記の条件で格納する。
+
+* 受信メッセージHeaderとBodyは全て文字列として格納する。
+
+![schematic diagram](./docs/img/usecase_diagram.drawio.png)
+
+#### 起動順序 startupOrder
+
+| 名称         | 値  |
+| ------------ | --- |
+| startupOrder | 300 |
+
+#### 環境変数
+
+| 名称              | 値                     |
+| ----------------- | ---------------------- |
+| URI               | `http://influxdb:8086` |
+| DBName            | example                |
+| Interval          | 2                      |
+| TransportProtocol | Amqp                   |
+| LogLevel          | debug                  |
+
+#### コンテナーの作成オプション Create Option
+
+```json
+{}
+```
+
+#### モジュールツインの設定
+
+```JSON
+{
+  "dbparam1": {
+    "input": "input1",
+    "measurement": "sensor",
+    "use_header": true,
+    "use_data": true,
+    "set_usertimestamp": false,
+    "field_data_type": "string_all",
+    "tags": {
+      "tag1": "type",
+      "tag2": {
+        "tag_name": "row_number",
+        "value_type": "MessagePropertyAndRowIndex"
+      },
+      "tag3": "shot_count"
+    }
+  }
+}
+
+```
+
+#### 入力内容
+
+メッセージ1通目
+
+```json
+{
+  "Body": {
+    "RecordList": [
+      {
+        "RecordHeader":["example_sensor.xlsx","1"],
+        "RecordData":["2021/07/15 11:00:00", "AAA", …, "10"]
+      },
+      {
+        "RecordHeader":["example_sensor.xlsx","2"],
+        "RecordData":["2021/07/15 11:00:03", "AAB", …, "10"]
+      },
+      {
+        "RecordHeader":["example_sensor.xlsx","3"],
+        "RecordData":["2021/07/15 11:00:05", "ABA", …, "10"]
+      },
+      {
+        "RecordHeader":["example_sensor.xlsx","4"],
+        "RecordData":["2021/07/15 11:00:09", "ABB", …, "10"]
+      }
+    ]
+  },
+  "Properties": {
+    "filename":"example_sensor.xlsx",
+    "row_number":1,
+    "shot_count":1
+  }
+}
+```
+
+メッセージ2通目(eofメッセージ)
+
+```json
+{
+  "Properties": {
+    "filename":"example_sensor.xlsx",
+    "type": "eof",
+    "row_number":5,
+    "shot_count":1
+  }
+}
+```
+
+#### 出力結果
+
+InfluxDBのレコード
+
+出力例: InfluxDBの格納データ
+
+| DB      | measurement | time                | 1                     | 2    | 3                     | 4     | 5    | 6    | type | row_number | shot_count |
+| ------- | ----------- | ------------------- | --------------------- | ---- | --------------------- | ----- | ---- | ---- | ---- | ---------- | ---------- |
+| example | sensor      | 2021/07/15 11:00:10 | "example_sensor.xlsx" | "1"  | "2021/07/15 11:00:00" | "AAA" | ...  | "10" |      | 1          | 1          |
+|         |             | 2021/07/15 11:00:12 | "example_sensor.xlsx" | "2"  | "2021/07/15 11:00:03" | "AAB" | ...  | "10" |      | 2          | 1          |
+|         |             | 2021/07/15 11:00:14 | "example_sensor.xlsx" | "3"  | "2021/07/15 11:00:05" | "ABA" | ...  | "10" |      | 3          | 1          |
+|         |             | 2021/07/15 11:00:16 | "example_sensor.xlsx" | "4"  | "2021/07/15 11:00:09" | "ABB" | ...  | "10" |      | 4          | 1          |
+|         |             | 2021/07/15 11:00:18 | None                  | None | None                  | None  | None | None | eof  | 5          | 1          |
 
 ## Feedback
+
 お気づきの点があれば、ぜひIssueにてお知らせください。
 
 ## LICENSE
+
 FileCleaner is licensed under the MIT License, see the [LICENSE](LICENSE) file for details.
